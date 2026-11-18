@@ -88,6 +88,20 @@
             </tr>
           </tbody>
         </table>
+        <div id="lazyload-sentinel" class="lazyload-sentinel" aria-hidden="true"></div>
+      </div>
+      <div id="pagination-bar" class="pagination-bar">
+        <span id="page-summary" class="page-summary">正在计算页数...</span>
+        <div class="page-controls">
+          <label class="checkbox-line page-auto-label">
+            <input type="checkbox" id="chk-auto-lazyload" checked />
+            <span>下滑自动加载 (+100条)</span>
+          </label>
+          <button type="button" id="btn-page-prev" class="btn btn-secondary btn-sm">‹ 上一页</button>
+          <span id="page-indicator" class="page-indicator">第 1 / 1 页</span>
+          <button type="button" id="btn-page-next" class="btn btn-secondary btn-sm">下一页 ›</button>
+          <button type="button" id="btn-load-more" class="btn btn-primary btn-sm" hidden>⬇ 加载更多 (+100条)</button>
+        </div>
       </div>
     </section>
   </main>

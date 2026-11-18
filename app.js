@@ -84,8 +84,12 @@ const state = {
   isAdmin: localStorage.getItem(ADMIN_SESSION_KEY) === '1',
   orders: [],
   vendors: [],
-  shippings: []
+  shippings: [],
+  currentPage: 1,
+  visibleEnd: 100,
+  sliceSinglePage: false
 };
+const PAGE_SIZE = 100;
 
 /* ==================== 初始化 ==================== */
 document.addEventListener('DOMContentLoaded', () => {
@@ -267,11 +271,19 @@ function bindEvents() {
     });
   });
 
-  // 搜索与筛选
+  // 搜索与筛选（变更时重置回第 1 页前 100 条）
   ['search-input', 'filter-shipping', 'filter-payment', 'filter-delivery'].forEach((id) => {
-    document.getElementById(id).addEventListener('input', renderTable);
-    document.getElementById(id).addEventListener('change', renderTable);
+    const onFilterChange = () => {
+      state.currentPage = 1;
+      state.visibleEnd = PAGE_SIZE;
+      state.sliceSinglePage = false;
+      renderTable();
+    };
+    document.getElementById(id).addEventListener('input', onFilterChange);
+    document.getElementById(id).addEventListener('change', onFilterChange);
   });
+
+  initLazyLoadAndPagination();
 
   // 模板或地区变化时自动更新 SHIPPING 预览
   document.getElementById('new-template').addEventListener('change', updateShippingPreview);
@@ -524,23 +536,124 @@ function getFilteredOrders() {
   });
 }
 
+function initLazyLoadAndPagination() {
+  const prevBtn = document.getElementById('btn-page-prev');
+  const nextBtn = document.getElementById('btn-page-next');
+  const loadMoreBtn = document.getElementById('btn-load-more');
+  const sentinel = document.getElementById('lazyload-sentinel');
+
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (state.currentPage > 1) {
+        state.currentPage--;
+        state.visibleEnd = state.currentPage * PAGE_SIZE;
+        state.sliceSinglePage = true;
+        renderTable();
+        document.querySelector('.table-wrapper')?.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      const total = getFilteredOrders().length;
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (state.currentPage < totalPages) {
+        state.currentPage++;
+        state.visibleEnd = state.currentPage * PAGE_SIZE;
+        state.sliceSinglePage = true;
+        renderTable();
+        document.querySelector('.table-wrapper')?.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }
+
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', () => {
+      loadNextBatch();
+    });
+  }
+
+  if (sentinel && 'IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const chk = document.getElementById('chk-auto-lazyload');
+        if (!chk || !chk.checked) return;
+        if (entries.some((e) => e.isIntersecting)) {
+          loadNextBatch();
+        }
+      },
+      { root: null, rootMargin: '180px 0px' }
+    );
+    observer.observe(sentinel);
+  }
+}
+
+function loadNextBatch() {
+  const total = getFilteredOrders().length;
+  if (state.visibleEnd >= total) return;
+  state.sliceSinglePage = false;
+  state.visibleEnd = Math.min(state.visibleEnd + PAGE_SIZE, total);
+  state.currentPage = Math.ceil(state.visibleEnd / PAGE_SIZE);
+  renderTable();
+}
+
+function updatePaginationUI(totalRows, startIdx, endIdx) {
+  const summaryEl = document.getElementById('page-summary');
+  const indicatorEl = document.getElementById('page-indicator');
+  const prevBtn = document.getElementById('btn-page-prev');
+  const nextBtn = document.getElementById('btn-page-next');
+  const loadMoreBtn = document.getElementById('btn-load-more');
+
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  if (state.currentPage > totalPages) state.currentPage = totalPages;
+
+  if (summaryEl) {
+    summaryEl.textContent =
+      totalRows === 0
+        ? '共 0 条记录 (100条/页)'
+        : `显示第 ${startIdx + 1}–${endIdx} 条 / 共 ${totalRows} 条 (100条/页)`;
+  }
+  if (indicatorEl) {
+    indicatorEl.textContent = `第 ${state.currentPage} / ${totalPages} 页`;
+  }
+  if (prevBtn) prevBtn.disabled = state.currentPage <= 1;
+  if (nextBtn) nextBtn.disabled = state.currentPage >= totalPages;
+  if (loadMoreBtn) {
+    const remaining = totalRows - endIdx;
+    loadMoreBtn.hidden = remaining <= 0;
+    if (remaining > 0) {
+      loadMoreBtn.textContent = `⬇ 加载更多 (+${Math.min(PAGE_SIZE, remaining)}条)`;
+    }
+  }
+}
+
 function renderTable() {
   const tbody = document.getElementById('orders-tbody');
   const rows = getFilteredOrders();
   renderKpis(rows);
 
   if (!rows.length) {
+    updatePaginationUI(0, 0, 0);
     tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">没有符合条件的订单</td></tr>';
     return;
   }
 
+  const startIdx = state.sliceSinglePage ? (state.currentPage - 1) * PAGE_SIZE : 0;
+  const endIdx = Math.min(state.visibleEnd, rows.length);
+  const visibleRows = rows.slice(startIdx, endIdx);
+  updatePaginationUI(rows.length, startIdx, endIdx);
+
   tbody.innerHTML = '';
-  rows.forEach((order) => {
+  visibleRows.forEach((order, idx) => {
     const tr = document.createElement('tr');
     const payStatus = (order.statusPayment || 'PENDING').toUpperCase();
     const delStatus = order.statusDelivery || 'PENDING';
     const isComplete = payStatus === 'DONE' && delStatus.toUpperCase() === 'COMPLETE';
     tr.className = isComplete ? 'row-complete' : 'row-pending';
+    if (idx >= 25) {
+      tr.classList.add('heavy-row-deferred');
+    }
 
     // Sticky Row Header: PO No
     const th = document.createElement('th');
