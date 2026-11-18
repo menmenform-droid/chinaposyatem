@@ -28,6 +28,7 @@ const DEMO_ORDERS = [
     paymentSlipLinks: '',
     statusPayment: 'PENDING',
     statusDelivery: 'VENDOR BELUM HANTAR',
+    chinaBank: '中国农业银行 6228 4803 8284 6815 217 户名：JOSHI',
     invoiceLinks: ''
   },
   {
@@ -50,6 +51,7 @@ const DEMO_ORDERS = [
     paymentSlipLinks: '',
     statusPayment: 'PENDING',
     statusDelivery: 'DI GUDANG TRANSPORT',
+    chinaBank: '建设银行：6227001463600056339 户名：朱明红 开户行：浙江自贸区义乌支行',
     invoiceLinks: ''
   },
   {
@@ -72,6 +74,7 @@ const DEMO_ORDERS = [
     paymentSlipLinks: 'https://drive.google.com/file/d/1Mx35LWv0tRG94nHmnsUBoROIcI164stQ/view',
     statusPayment: 'DONE',
     statusDelivery: 'COMPLETE',
+    chinaBank: '中行：6217856200061259292 户名：吴航',
     invoiceLinks: ''
   }
 ];
@@ -87,6 +90,7 @@ const state = {
 /* ==================== 初始化 ==================== */
 document.addEventListener('DOMContentLoaded', () => {
   initDialogFallbacks();
+  initCopyCommands();
   bindEvents();
   updateConnectionUI();
   updateAdminUI();
@@ -94,6 +98,87 @@ document.addEventListener('DOMContentLoaded', () => {
   updateShippingPreview();
   loadOrders();
 });
+
+/* ==================== 一键复制 (Invoker Commands + Clipboard Fallback) ==================== */
+const copyTimers = new WeakMap();
+let lastCopyMessage = '';
+
+function legacyCopyText(text) {
+  const field = Object.assign(document.createElement('textarea'), { value: text });
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset-block-start:0;opacity:0';
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand('copy');
+  } finally {
+    field.remove();
+  }
+}
+
+function reportCopyResult(button, ok) {
+  const tip = button.nextElementSibling;
+  clearTimeout(copyTimers.get(button));
+  button.removeAttribute('data-copied');
+  button.removeAttribute('data-failed');
+  let message = ok ? '已复制' : '复制失败';
+  if (message === lastCopyMessage) message += '\u00A0';
+  lastCopyMessage = message;
+  if (tip) tip.textContent = '';
+  void button.offsetWidth;
+  button.setAttribute(ok ? 'data-copied' : 'data-failed', '');
+  if (tip) {
+    requestAnimationFrame(() => {
+      tip.textContent = message;
+    });
+  }
+  copyTimers.set(
+    button,
+    setTimeout(() => {
+      button.removeAttribute('data-copied');
+      button.removeAttribute('data-failed');
+      if (tip) tip.textContent = '';
+    }, 1800)
+  );
+}
+
+async function copyElementText(button, target) {
+  const text = target.matches('input, textarea') ? target.value.trim() : target.innerText.trim();
+  if (!text) {
+    showToast('当前没有可复制的银行账号内容');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    reportCopyResult(button, true);
+    showToast('已复制 China Bank 银行账号');
+  } catch {
+    const ok = legacyCopyText(text);
+    reportCopyResult(button, ok);
+    if (ok) showToast('已复制 China Bank 银行账号');
+  }
+}
+
+function initCopyCommands() {
+  document.addEventListener(
+    'command',
+    (event) => {
+      if (event.command && event.command.startsWith('--copy')) {
+        copyElementText(event.source, event.target);
+      }
+    },
+    true
+  );
+
+  if (!('CommandEvent' in window)) {
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button[command^="--copy"]');
+      if (!button) return;
+      const target = document.getElementById(button.getAttribute('commandfor'));
+      if (target) copyElementText(button, target);
+    });
+  }
+}
 
 function loadConfig() {
   try {
@@ -172,6 +257,7 @@ function bindEvents() {
     openSettingsDialog();
   });
   document.getElementById('btn-new-order').addEventListener('click', openNewOrderDialog);
+  document.getElementById('btn-open-bank-modal').addEventListener('click', () => openBankDialog(null));
 
   document.querySelectorAll('[data-close-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -189,6 +275,13 @@ function bindEvents() {
   // 模板或地区变化时自动更新 SHIPPING 预览
   document.getElementById('new-template').addEventListener('change', updateShippingPreview);
   document.getElementById('new-region').addEventListener('change', updateShippingPreview);
+
+  // 独立 China Bank 弹窗：切换/输入商家或点 Load 时自动配对该商家最后一条最新 Bank
+  const bankVendorInput = document.getElementById('bank-vendor-input');
+  bankVendorInput.addEventListener('change', () => loadVendorLatestBankInModal(false));
+  bankVendorInput.addEventListener('input', () => loadVendorLatestBankInModal(false));
+  document.getElementById('btn-bank-load').addEventListener('click', () => loadVendorLatestBankInModal(true));
+  document.getElementById('bank-form').addEventListener('submit', handleSaveVendorBank);
 
   // 上传单据类型切换时显示/隐藏订金货款选项
   document.getElementById('upload-doc-type').addEventListener('change', toggleUploadTypeFields);
@@ -226,6 +319,85 @@ function updateShippingPreview() {
   }
 }
 
+/**
+ * 查找指定商家在总表中最后一条（rowIndex 最大 = 最新一条）非空 China Bank 记录
+ */
+function findVendorLatestBankInfo(vendorName) {
+  const v = String(vendorName || '').trim().toLowerCase();
+  if (!v) return null;
+  let best = null;
+  for (const o of state.orders) {
+    if (String(o.vendor || '').trim().toLowerCase() === v && o.chinaBank && String(o.chinaBank).trim()) {
+      if (!best || Number(o.rowIndex) > Number(best.rowIndex)) {
+        best = {
+          bank: String(o.chinaBank).trim(),
+          poNo: o.poNo || `Row #${o.rowIndex}`,
+          rowIndex: o.rowIndex
+        };
+      }
+    }
+  }
+  return best;
+}
+
+function findVendorLatestBank(vendorName) {
+  const info = findVendorLatestBankInfo(vendorName);
+  return info ? info.bank : '';
+}
+
+/**
+ * 在前端内存中同步更新该商家最后一条记录的 China Bank，确保本地立刻拿到最新值
+ */
+function syncLocalVendorLatestBank(vendorName, newBankVal, currentRowIndex = 0) {
+  const v = String(vendorName || '').trim().toLowerCase();
+  const cleanBank = String(newBankVal || '').trim();
+  if (currentRowIndex) {
+    const cur = state.orders.find((o) => Number(o.rowIndex) === Number(currentRowIndex));
+    if (cur) cur.chinaBank = cleanBank;
+  }
+  if (!v) return;
+  let latestOrder = null;
+  for (const o of state.orders) {
+    if (String(o.vendor || '').trim().toLowerCase() === v) {
+      if (!latestOrder || Number(o.rowIndex) > Number(latestOrder.rowIndex)) {
+        latestOrder = o;
+      }
+    }
+  }
+  if (latestOrder) {
+    latestOrder.chinaBank = cleanBank;
+  }
+}
+
+function autoFillVendorChinaBank(force = false) {
+  const vendor = document.getElementById('new-vendor').value.trim();
+  const bankField = document.getElementById('new-china-bank');
+  const hintEl = document.getElementById('new-bank-match-hint');
+  const info = findVendorLatestBankInfo(vendor);
+
+  if (info) {
+    if (force || !bankField.value.trim() || bankField.dataset.autoFilled === '1') {
+      bankField.value = info.bank;
+      bankField.dataset.autoFilled = '1';
+      if (hintEl) {
+        hintEl.textContent = `✅ 已配对【${vendor}】最后一条最新记录 (来自 PO: ${info.poNo})，可直接修改并在建单时保存为最新`;
+      }
+      if (force) showToast(`已载入 ${vendor} 最新一条 China Bank`);
+    }
+  } else {
+    if (force) {
+      showToast(vendor ? `未找到商家 ${vendor} 的历史 China Bank` : '请先输入或选择供应商');
+    } else if (bankField.dataset.autoFilled === '1') {
+      bankField.value = '';
+    }
+    if (hintEl) {
+      hintEl.textContent = vendor
+        ? `ℹ️ 商家【${vendor}】暂无历史 China Bank，请直接输入，保存后将作为该商家最新记录`
+        : '输入或选择上方「供应商 (VENDOR)」后，将自动配对该商家最新一条 China Bank';
+    }
+  }
+}
+
 /* ==================== API 请求 ==================== */
 async function callGas(action, payload = {}) {
   const res = await fetch(getGasUrl(), {
@@ -247,7 +419,7 @@ async function callGas(action, payload = {}) {
 
 async function loadOrders() {
   const tbody = document.getElementById('orders-tbody');
-  tbody.innerHTML = '<tr><td colspan="10" class="empty-cell">正在读取订单数据...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">正在读取订单数据...</td></tr>';
 
   try {
     if (isLiveMode()) {
@@ -265,7 +437,7 @@ async function loadOrders() {
     renderKpis();
     renderTable();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">加载失败：${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-cell">加载失败：${escapeHtml(err.message)}</td></tr>`;
     showToast('加载失败: ' + err.message);
   }
 }
@@ -323,7 +495,7 @@ function getFilteredOrders() {
     if (pay && (o.statusPayment || 'PENDING').toUpperCase() !== pay) return false;
     if (deliv && (o.statusDelivery || '').toUpperCase() !== deliv) return false;
     if (q) {
-      const hay = `${o.poNo} ${o.vendor} ${o.itemSummary} ${o.shipping}`.toLowerCase();
+      const hay = `${o.poNo} ${o.vendor} ${o.itemSummary} ${o.shipping} ${o.chinaBank || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -336,7 +508,7 @@ function renderTable() {
   renderKpis(rows);
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-cell">没有符合条件的订单</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">没有符合条件的订单</td></tr>';
     return;
   }
 
@@ -389,6 +561,67 @@ function renderTable() {
     const pendClass = hasPend && pendNum > 0 ? 'amount-pending' : 'amount-cleared';
     amountTd.innerHTML = `<div class="amount-total">${escapeHtml(amtText)}</div><div class="${pendClass}">${escapeHtml(pendText)}</div>`;
     tr.appendChild(amountTd);
+
+    // China Bank (收款银行账号：默认配对该商家最后一条最新 Bank，可一键 Copy + 可直接点修改)
+    const bankTd = document.createElement('td');
+    bankTd.setAttribute('data-label', 'China Bank');
+    bankTd.className = 'col-bank';
+    const bankVal = findVendorLatestBank(order.vendor) || String(order.chinaBank || '').trim();
+    const bankId = `bank-val-${order.rowIndex}`;
+    const bankWrap = document.createElement('div');
+    bankWrap.className = 'bank-cell-wrap';
+
+    if (bankVal) {
+      const bankTextDiv = document.createElement('div');
+      bankTextDiv.id = bankId;
+      bankTextDiv.className = 'bank-text';
+      bankTextDiv.textContent = bankVal;
+      bankWrap.appendChild(bankTextDiv);
+
+      const actBar = document.createElement('div');
+      actBar.className = 'bank-actions';
+
+      const copySpan = document.createElement('span');
+      copySpan.className = 'copy';
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'copy-button';
+      copyBtn.setAttribute('command', '--copy');
+      copyBtn.setAttribute('commandfor', bankId);
+      copyBtn.textContent = '📋 复制';
+      const tipSpan = document.createElement('span');
+      tipSpan.className = 'tip';
+      tipSpan.setAttribute('role', 'status');
+      copySpan.appendChild(copyBtn);
+      copySpan.appendChild(tipSpan);
+      actBar.appendChild(copySpan);
+
+      if (state.isAdmin) {
+        const editBankBtn = document.createElement('button');
+        editBankBtn.type = 'button';
+        editBankBtn.className = 'btn-bank-edit';
+        editBankBtn.textContent = '✎ 修改';
+        editBankBtn.addEventListener('click', () => openBankDialog(order));
+        actBar.appendChild(editBankBtn);
+      }
+      bankWrap.appendChild(actBar);
+    } else {
+      if (state.isAdmin) {
+        const addBankBtn = document.createElement('button');
+        addBankBtn.type = 'button';
+        addBankBtn.className = 'btn-bank-edit';
+        addBankBtn.textContent = '+ 填写账号';
+        addBankBtn.addEventListener('click', () => openBankDialog(order));
+        bankWrap.appendChild(addBankBtn);
+      } else {
+        const emptyBank = document.createElement('span');
+        emptyBank.className = 'hint';
+        emptyBank.textContent = '-';
+        bankWrap.appendChild(emptyBank);
+      }
+    }
+    bankTd.appendChild(bankWrap);
+    tr.appendChild(bankTd);
 
     // 状态列
     const statusTd = document.createElement('td');
@@ -557,15 +790,17 @@ async function handleCreateOrder(e) {
       ...(await readFilesAsPayload('new-file-warehouse', 'warehouse_receipt'))
     ];
 
+    const vendorVal = document.getElementById('new-vendor').value.trim();
     const payload = {
       templateType: document.getElementById('new-template').value,
       region: document.getElementById('new-region').value,
       shipping: document.getElementById('new-shipping').value.trim(),
       poNo: document.getElementById('new-po-no').value.trim(),
       date: document.getElementById('new-date').value,
-      vendor: document.getElementById('new-vendor').value.trim(),
+      vendor: vendorVal,
       cartons: document.getElementById('new-cartons').value,
       itemSummary: document.getElementById('new-item-summary').value.trim(),
+      chinaBank: findVendorLatestBank(vendorVal),
       poAmount: document.getElementById('new-amount').value,
       statusDelivery: document.getElementById('new-delivery-status').value,
       attachments
@@ -605,7 +840,8 @@ async function handleCreateOrder(e) {
         paymentVoucher: '',
         paymentSlipLinks: attachments.some((a) => a.docType === 'payment_slip') ? 'https://drive.google.com/demo-payment' : '',
         statusPayment: 'PENDING',
-        statusDelivery: payload.statusDelivery
+        statusDelivery: payload.statusDelivery,
+        chinaBank: payload.chinaBank
       });
       renderKpis();
       renderTable();
@@ -734,7 +970,7 @@ async function handleUploadFiles(e) {
   }
 }
 
-/* ==================== 更新付款与状态 ==================== */
+/* ==================== 更新付款与状态 (独立纯粹) ==================== */
 function openEditDialog(order) {
   if (!state.isAdmin) return openAdminDialog();
   document.getElementById('edit-row-index').value = order.rowIndex;
@@ -797,6 +1033,130 @@ async function handleUpdateOrder(e) {
   } finally {
     btn.disabled = false;
     btn.textContent = '保存更新';
+  }
+}
+
+/* ==================== 独立专属：商家 China Bank 弹窗 (Load -> 修改 -> 保存) ==================== */
+function openBankDialog(order = null) {
+  const form = document.getElementById('bank-form');
+  form.reset();
+  const vendorInput = document.getElementById('bank-vendor-input');
+  const rowInput = document.getElementById('bank-row-index');
+
+  if (order) {
+    vendorInput.value = order.vendor || '';
+    rowInput.value = order.rowIndex || '';
+  } else {
+    const firstVendor = state.vendors[0] || (state.orders[0] && state.orders[0].vendor) || '';
+    vendorInput.value = firstVendor;
+    rowInput.value = '';
+  }
+
+  loadVendorLatestBankInModal(false);
+  document.getElementById('bank-dialog').showModal();
+}
+
+function loadVendorLatestBankInModal(showToastMsg = false) {
+  const vendor = document.getElementById('bank-vendor-input').value.trim();
+  const infoEl = document.getElementById('bank-match-info');
+  const bankTextarea = document.getElementById('bank-account-input');
+  const rowInput = document.getElementById('bank-row-index');
+
+  if (!vendor) {
+    infoEl.textContent = '请选择或输入供应商名称以配对该商家最后一条最新 China Bank';
+    bankTextarea.value = '';
+    return;
+  }
+
+  const latestInfo = findVendorLatestBankInfo(vendor);
+  // 找到该商家最新一条订单（不论是否有 bank）以便保存时定位行号
+  let latestVendorOrder = null;
+  for (const o of state.orders) {
+    if (String(o.vendor || '').trim().toLowerCase() === vendor.toLowerCase()) {
+      if (!latestVendorOrder || Number(o.rowIndex) > Number(latestVendorOrder.rowIndex)) {
+        latestVendorOrder = o;
+      }
+    }
+  }
+
+  if (latestVendorOrder && !rowInput.value) {
+    rowInput.value = latestVendorOrder.rowIndex;
+  }
+
+  if (latestInfo) {
+    bankTextarea.value = latestInfo.bank;
+    infoEl.textContent = `✅ 已配对【${vendor}】最后一条最新记录 (来自 PO: ${latestInfo.poNo} · 第 ${latestInfo.rowIndex} 行)`;
+    if (showToastMsg) showToast(`已 Load 商家 ${vendor} 最新一条 China Bank`);
+  } else if (latestVendorOrder) {
+    bankTextarea.value = '';
+    infoEl.textContent = `ℹ️ 商家【${vendor}】(最新 PO: ${latestVendorOrder.poNo || '#' + latestVendorOrder.rowIndex}) 尚未填写 China Bank，请直接输入并保存`;
+    if (showToastMsg) showToast(`商家 ${vendor} 暂无历史账号，可直接输入并保存`);
+  } else {
+    bankTextarea.value = '';
+    infoEl.textContent = `⚠️ 总表中未找到供应商【${vendor}】的订单记录`;
+    if (showToastMsg) showToast(`未找到供应商 ${vendor}`);
+  }
+}
+
+async function handleSaveVendorBank(e) {
+  e.preventDefault();
+  if (!state.isAdmin) return openAdminDialog();
+
+  const vendor = document.getElementById('bank-vendor-input').value.trim();
+  const newBank = document.getElementById('bank-account-input').value.trim();
+  if (!vendor) {
+    showToast('请先选择或输入供应商');
+    return;
+  }
+
+  // 定位该商家的最后一条（最新）订单行
+  let targetOrder = null;
+  const specifiedRow = Number(document.getElementById('bank-row-index').value);
+  if (specifiedRow) {
+    const byRow = state.orders.find((o) => Number(o.rowIndex) === specifiedRow);
+    if (byRow && String(byRow.vendor || '').trim().toLowerCase() === vendor.toLowerCase()) {
+      targetOrder = byRow;
+    }
+  }
+  if (!targetOrder) {
+    for (const o of state.orders) {
+      if (String(o.vendor || '').trim().toLowerCase() === vendor.toLowerCase()) {
+        if (!targetOrder || Number(o.rowIndex) > Number(targetOrder.rowIndex)) {
+          targetOrder = o;
+        }
+      }
+    }
+  }
+
+  if (!targetOrder) {
+    showToast(`总表中没有供应商 ${vendor} 的订单，请先新建该供应商的订单`);
+    return;
+  }
+
+  const btn = document.getElementById('btn-bank-save');
+  btn.disabled = true;
+  btn.textContent = '正在保存...';
+
+  try {
+    if (isLiveMode()) {
+      await callGas('updateOrder', {
+        rowIndex: targetOrder.rowIndex,
+        expectedPoNo: targetOrder.poNo,
+        vendor: targetOrder.vendor,
+        chinaBank: newBank
+      });
+      await loadOrders();
+    } else {
+      syncLocalVendorLatestBank(vendor, newBank, targetOrder.rowIndex);
+      renderTable();
+    }
+    loadVendorLatestBankInModal(false);
+    showToast(`✅ 已保存并更新【${vendor}】最新 China Bank！`);
+  } catch (err) {
+    showToast('保存失败: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 保存为最新 Bank';
   }
 }
 

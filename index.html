@@ -20,6 +20,7 @@
         <span id="connection-badge" class="status-pill status-demo">演示模式</span>
         <button type="button" id="btn-admin-lock" class="btn btn-secondary">🔒 解锁 Admin</button>
         <button type="button" id="btn-refresh" class="btn btn-secondary">↻ 刷新数据</button>
+        <button type="button" id="btn-open-bank-modal" class="btn btn-secondary">🏦 商家 China Bank</button>
         <button type="button" id="btn-settings" class="btn btn-secondary admin-only" hidden>⚙ 设置连接</button>
         <button type="button" id="btn-new-order" class="btn btn-primary admin-only" hidden>+ 新建订单</button>
       </div>
@@ -59,7 +60,7 @@
     <!-- 筛选栏 -->
     <section class="toolbar" aria-label="筛选与搜索">
       <div class="search-box">
-        <input type="search" id="search-input" placeholder="搜索 PO 单号、供应商、货品摘要..." aria-label="搜索订单" />
+        <input type="search" id="search-input" placeholder="搜索 PO 单号、供应商、货品摘要、银行户名/卡号..." aria-label="搜索订单" />
       </div>
       <div class="filter-group">
         <select id="filter-shipping" aria-label="按物流筛选">
@@ -94,6 +95,7 @@
               <th>物流</th>
               <th>件数</th>
               <th>金额 / 待付</th>
+              <th>China Bank (收款账号)</th>
               <th>付款 / 物流</th>
               <th>单据链接</th>
               <th>操作</th>
@@ -101,7 +103,7 @@
           </thead>
           <tbody id="orders-tbody">
             <tr>
-              <td colspan="10" class="empty-cell">正在加载订单...</td>
+              <td colspan="11" class="empty-cell">正在加载订单...</td>
             </tr>
           </tbody>
         </table>
@@ -285,7 +287,7 @@
     </form>
   </dialog>
 
-  <!-- 3. 更新付款与状态 Modal -->
+  <!-- 3. 更新付款与订单状态 Modal (保持纯粹，不混入 China Bank) -->
   <dialog id="edit-dialog" aria-labelledby="edit-title" closedby="any">
     <div class="dialog-header">
       <h2 id="edit-title">更新付款与订单状态</h2>
@@ -346,6 +348,45 @@
       <div class="dialog-footer">
         <button type="button" class="btn btn-secondary" data-close-dialog="edit-dialog">取消</button>
         <button type="submit" id="btn-edit-submit" class="btn btn-primary">保存更新</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 3B. 独立专属：商家 China Bank 弹窗 (配对商家最后一条 → Load → 修改 → 保存) -->
+  <dialog id="bank-dialog" aria-labelledby="bank-dialog-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="bank-dialog-title">🏦 商家 China Bank 管理 (配对最新 · Load → 修改 → 保存)</h2>
+      <button type="button" class="icon-close" data-close-dialog="bank-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="bank-form" class="dialog-body">
+      <input type="hidden" id="bank-row-index" />
+
+      <div class="field">
+        <label for="bank-vendor-input">1. 选择或输入供应商 (VENDOR) <span class="req">*</span></label>
+        <div style="display:flex;gap:0.5rem;">
+          <input type="text" id="bank-vendor-input" list="vendor-datalist" placeholder="输入或选择供应商名称 (例如 DGG、YOUQI)" required style="flex:1;" />
+          <button type="button" id="btn-bank-load" class="btn btn-secondary">🔄 Load 最新 Bank</button>
+        </div>
+      </div>
+
+      <p id="bank-match-info" class="order-badge-line">请选择供应商以自动配对该商家最后一条最新 China Bank</p>
+
+      <div class="field">
+        <div class="field-label-row">
+          <label for="bank-account-input">2. China Bank 账号资料 (可直接 Copy 或修改)</label>
+          <span class="copy">
+            <button type="button" class="copy-button" command="--copy" commandfor="bank-account-input">📋 一键复制账号</button>
+            <span class="tip" role="status"></span>
+          </span>
+        </div>
+        <textarea id="bank-account-input" rows="4" placeholder="开户行、支行、银行卡号、户名..." autofocus></textarea>
+        <small class="hint">修改后点击下方「保存为最新 Bank」，系统会自动写回该商家最后一条最新记录（S列），确保下次配对永远是最新账号。</small>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="bank-dialog">关闭</button>
+        <button type="submit" id="btn-bank-save" class="btn btn-primary admin-only">💾 保存为最新 Bank</button>
       </div>
     </form>
   </dialog>

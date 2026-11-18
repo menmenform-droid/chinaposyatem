@@ -522,6 +522,108 @@ tbody tr.row-pending:hover td {
   white-space: nowrap;
 }
 
+.col-bank {
+  min-width: 155px;
+  max-width: 225px;
+}
+
+.bank-cell-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.bank-text {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.28rem 0.45rem;
+}
+
+.bank-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.copy {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.copy-button,
+.btn-bank-edit {
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0.16rem 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.copy-button:hover,
+.btn-bank-edit:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.copy-button[data-copied] {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.copy-button[data-failed] {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.copy .tip {
+  position: absolute;
+  inset-block-end: calc(100% + 4px);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.18rem 0.45rem;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 15;
+}
+
+.copy-button[data-copied] + .tip,
+.copy-button[data-failed] + .tip {
+  opacity: 1;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .col-links {
   max-width: 165px;
 }
@@ -781,7 +883,8 @@ dialog::backdrop {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   padding: 0.52rem 0.75rem;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -790,8 +893,14 @@ dialog::backdrop {
   transition: border-color 0.15s;
 }
 
+.field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
