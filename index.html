@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHINA PO 订单与单据管理系统</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">📦</span>
+        <div>
+          <h1>CHINA PO 订单管理系统</h1>
+          <p class="subtitle">Google Sheets 建单 · 水单 / 入库单 PO 子文件夹上传</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="connection-badge" class="status-pill status-demo">演示模式</span>
+        <button type="button" id="btn-admin-lock" class="btn btn-secondary">🔒 解锁 Admin</button>
+        <button type="button" id="btn-refresh" class="btn btn-secondary">↻ 刷新数据</button>
+        <button type="button" id="btn-settings" class="btn btn-secondary admin-only" hidden>⚙ 设置连接</button>
+        <button type="button" id="btn-new-order" class="btn btn-primary admin-only" hidden>+ 新建订单</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 提示条：未配置 GAS 时显示 -->
+    <section id="setup-banner" class="banner" hidden>
+      <div>
+        <strong>尚未连接 Google Apps Script 后端</strong>
+        <span>当前显示为本地示例数据。点击右侧「设置连接」填入你的 GAS Web App URL 与密码即可实时读写 Google Sheets &amp; Drive。</span>
+      </div>
+      <button type="button" id="btn-banner-settings" class="btn btn-primary btn-sm">立即配置</button>
+    </section>
+
+    <!-- 统计概览 -->
+    <section class="kpi-grid" aria-label="订单统计">
+      <article class="kpi-card">
+        <span class="kpi-label">总订单数</span>
+        <strong id="kpi-total" class="kpi-value">0</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">待付人民币 (RMB)</span>
+        <strong id="kpi-pending-rmb" class="kpi-value kpi-warn">¥0.00</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">待付款订单</span>
+        <strong id="kpi-unpaid" class="kpi-value">0</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">未完成物流</span>
+        <strong id="kpi-undelivered" class="kpi-value">0</strong>
+      </article>
+    </section>
+
+    <!-- 筛选栏 -->
+    <section class="toolbar" aria-label="筛选与搜索">
+      <div class="search-box">
+        <input type="search" id="search-input" placeholder="搜索 PO 单号、供应商、货品摘要..." aria-label="搜索订单" />
+      </div>
+      <div class="filter-group">
+        <select id="filter-shipping" aria-label="按物流筛选">
+          <option value="">全部物流 (Shipping)</option>
+        </select>
+        <select id="filter-payment" aria-label="按付款状态筛选">
+          <option value="">全部付款状态</option>
+          <option value="PENDING">PENDING (未付清)</option>
+          <option value="DONE">DONE (已付清)</option>
+        </select>
+        <select id="filter-delivery" aria-label="按物流状态筛选">
+          <option value="">全部物流状态</option>
+          <option value="VENDOR BELUM HANTAR">VENDOR BELUM HANTAR</option>
+          <option value="DI GUDANG TRANSPORT">DI GUDANG TRANSPORT</option>
+          <option value="SAMPAI WAREHOUSE BELUM CHECK">SAMPAI WAREHOUSE BELUM CHECK</option>
+          <option value="COMPLETE">COMPLETE</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- 订单列表 -->
+    <section class="card table-card">
+      <div tabindex="0" role="region" aria-labelledby="orders-caption" class="table-wrapper">
+        <table id="orders-table">
+          <caption id="orders-caption" class="sr-only">中国采购订单总表</caption>
+          <thead>
+            <tr>
+              <th>PO 单号</th>
+              <th>日期</th>
+              <th>供应商</th>
+              <th>货品摘要</th>
+              <th>物流</th>
+              <th>件数</th>
+              <th>金额 / 待付</th>
+              <th>付款 / 物流</th>
+              <th>单据链接</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr>
+              <td colspan="10" class="empty-cell">正在加载订单...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- 1. 新建订单 Modal -->
+  <dialog id="new-order-dialog" aria-labelledby="new-order-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="new-order-title">新建采购订单 (复制模板生成 Sheet 链接)</h2>
+      <button type="button" class="icon-close" data-close-dialog="new-order-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="new-order-form" class="dialog-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="new-template">订单模板 <span class="req">*</span></label>
+          <select id="new-template" required>
+            <option value="TNL">TNL 模板</option>
+            <option value="LBS">LBS 模板</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="new-region">仓库地区 <span class="req">*</span></label>
+          <select id="new-region" required>
+            <option value="义乌" selected>义乌 (默认)</option>
+            <option value="广州">广州</option>
+          </select>
+        </div>
+
+        <div class="field field-full">
+          <label for="new-shipping">生成物流标记 (SHIPPING)</label>
+          <input type="text" id="new-shipping" required />
+          <small class="hint">系统根据模板与地区自动生成（如 TNLGHCMEN-义乌），你也可手动微调</small>
+        </div>
+
+        <div class="field">
+          <label for="new-po-no">PO 单号 (手动输入) <span class="req">*</span></label>
+          <input type="text" id="new-po-no" placeholder="例如：0008756 或 TNLDGG181126" required autofocus />
+        </div>
+
+        <div class="field">
+          <label for="new-date">订单日期</label>
+          <input type="date" id="new-date" />
+        </div>
+
+        <div class="field">
+          <label for="new-vendor">供应商 (VENDOR)</label>
+          <input type="text" id="new-vendor" list="vendor-datalist" placeholder="输入或选择供应商" />
+          <datalist id="vendor-datalist"></datalist>
+        </div>
+
+        <div class="field">
+          <label for="new-cartons">件数 (Cartons)</label>
+          <input type="number" id="new-cartons" min="0" step="1" placeholder="选填" />
+        </div>
+
+        <div class="field field-full">
+          <label for="new-item-summary">货品摘要 (ITEM SUMMERY)</label>
+          <input type="text" id="new-item-summary" placeholder="例如：CORRECTION TAPE / 文具批" />
+        </div>
+
+        <div class="field">
+          <label for="new-amount">订单金额 RMB (选填)</label>
+          <input type="number" id="new-amount" min="0" step="0.01" placeholder="0.00" />
+        </div>
+
+        <div class="field">
+          <label for="new-delivery-status">初始物流状态</label>
+          <select id="new-delivery-status">
+            <option value="VENDOR BELUM HANTAR" selected>VENDOR BELUM HANTAR</option>
+            <option value="DI GUDANG TRANSPORT">DI GUDANG TRANSPORT</option>
+            <option value="SAMPAI WAREHOUSE BELUM CHECK">SAMPAI WAREHOUSE BELUM CHECK</option>
+            <option value="COMPLETE">COMPLETE</option>
+          </select>
+        </div>
+      </div>
+
+      <fieldset class="attach-box">
+        <legend>同时上传单据 (可选，将自动存入各自对应的 Google Drive 文件夹)</legend>
+        <div class="attach-row">
+          <label>水单 (存入水单夹 → P列)<input type="file" id="new-file-payment" multiple accept="image/*,.pdf,.xlsx,.xls" /></label>
+          <label>入库单 (存入入库单夹 → E列)<input type="file" id="new-file-warehouse" multiple accept="image/*,.pdf,.xlsx,.xls" /></label>
+        </div>
+      </fieldset>
+
+      <div id="new-order-result" class="result-card" hidden>
+        <p class="result-title">✅ 订单已创建！已建立 PO 子文件夹并复制模板（空白模板，等你自行填写）：</p>
+        <p id="new-order-filename" class="result-filename"></p>
+        <div class="result-actions" style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+          <a id="new-order-sheet-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            ↗ 直接打开 Google Sheet 填写
+          </a>
+          <a id="new-order-folder-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+            📁 打开 PO 子文件夹 (已写入总表)
+          </a>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="new-order-dialog">关闭</button>
+        <button type="submit" id="btn-create-submit" class="btn btn-primary">创建订单并生成链接</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 2. 上传文件 Modal (水单 / 入库单) -->
+  <dialog id="upload-dialog" aria-labelledby="upload-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="upload-title">上传订单单据</h2>
+      <button type="button" class="icon-close" data-close-dialog="upload-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="upload-form" class="dialog-body">
+      <input type="hidden" id="upload-row-index" />
+      <p id="upload-order-info" class="order-badge-line"></p>
+
+      <div class="field">
+        <label for="upload-doc-type">选择单据类型（自动按 PO 单号建子文件夹存放）</label>
+        <select id="upload-doc-type" required autofocus>
+          <option value="payment_slip">水单 → 存入【水单/PO单号】子文件夹并写入 P 列</option>
+          <option value="warehouse_receipt">入库单 → 存入【入库单/PO单号】子文件夹并写入 E 列</option>
+        </select>
+      </div>
+
+      <!-- 水单专属：区分订金 / 货款并同步记账 -->
+      <div id="upload-payment-fields" class="attach-box">
+        <div class="form-grid">
+          <div class="field field-full">
+            <label for="upload-payment-kind">本次水单类型</label>
+            <select id="upload-payment-kind">
+              <option value="deposit">订金 (Deposit → 记入 J 列)</option>
+              <option value="balance">货款 / 尾款 (Balance → 累加记入 K 列)</option>
+              <option value="upload_only">仅上传水单文件（不自动改金额）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="upload-pay-rmb">本次付款金额 (RMB)</label>
+            <input type="number" id="upload-pay-rmb" min="0" step="0.01" placeholder="选填，自动累加" />
+          </div>
+          <div class="field">
+            <label for="upload-pay-myr">本次马币 (MYR)</label>
+            <input type="number" id="upload-pay-myr" min="0" step="0.01" placeholder="选填" />
+          </div>
+          <div class="field">
+            <label for="upload-pay-date">付款日期</label>
+            <input type="text" id="upload-pay-date" placeholder="例如：18/11/2026" />
+          </div>
+          <div class="field">
+            <label for="upload-pay-voucher">Payment Voucher</label>
+            <input type="text" id="upload-pay-voucher" placeholder="例如：PV2611-001" />
+          </div>
+          <div class="field field-full">
+            <label class="checkbox-line">
+              <input type="checkbox" id="upload-mark-done" />
+              <span>本次已付清全部货款（自动将付款状态设为 DONE）</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 入库单专属：批次备注 -->
+      <div id="upload-stage-field" class="field" hidden>
+        <label for="upload-stage-tag">批次 / 备注（选填，将写在文件名中方便区分）</label>
+        <input type="text" id="upload-stage-tag" placeholder="例如：第1批、第2批、补发" />
+      </div>
+
+      <div class="field">
+        <label for="upload-files-input">选择文件（支持多选图片、PDF、Excel）</label>
+        <input type="file" id="upload-files-input" multiple required accept="image/*,.pdf,.xlsx,.xls,.doc,.docx" />
+      </div>
+
+      <div id="upload-existing-links" class="existing-links"></div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="upload-dialog">取消</button>
+        <button type="submit" id="btn-upload-submit" class="btn btn-primary">开始上传到 Google Drive</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 3. 更新付款与状态 Modal -->
+  <dialog id="edit-dialog" aria-labelledby="edit-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="edit-title">更新付款与订单状态</h2>
+      <button type="button" class="icon-close" data-close-dialog="edit-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="edit-form" class="dialog-body">
+      <input type="hidden" id="edit-row-index" />
+      <p id="edit-order-info" class="order-badge-line"></p>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="edit-po-amount">PO 金额 (RMB)</label>
+          <input type="number" id="edit-po-amount" step="0.01" min="0" autofocus />
+        </div>
+        <div class="field">
+          <label for="edit-deposit">订金 / 付款1 (RMB)</label>
+          <input type="number" id="edit-deposit" step="0.01" min="0" />
+        </div>
+        <div class="field">
+          <label for="edit-payment2">付款2 / 尾款 (RMB)</label>
+          <input type="number" id="edit-payment2" step="0.01" min="0" />
+        </div>
+        <div class="field">
+          <label for="edit-myr">马币总额 (MYR)</label>
+          <input type="number" id="edit-myr" step="0.01" min="0" />
+        </div>
+        <div class="field">
+          <label for="edit-payment-date">付款日期</label>
+          <input type="text" id="edit-payment-date" placeholder="例如：18/11/2026" />
+        </div>
+        <div class="field">
+          <label for="edit-voucher">Payment Voucher</label>
+          <input type="text" id="edit-voucher" placeholder="例如：PV2611-001" />
+        </div>
+        <div class="field">
+          <label for="edit-status-payment">付款状态 (STATUS PAYMENT)</label>
+          <select id="edit-status-payment">
+            <option value="PENDING">PENDING</option>
+            <option value="DONE">DONE</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="edit-status-delivery">物流状态 (STATUS PENGHANTARAN)</label>
+          <select id="edit-status-delivery">
+            <option value="VENDOR BELUM HANTAR">VENDOR BELUM HANTAR</option>
+            <option value="DI GUDANG TRANSPORT">DI GUDANG TRANSPORT</option>
+            <option value="SAMPAI WAREHOUSE BELUM CHECK">SAMPAI WAREHOUSE BELUM CHECK</option>
+            <option value="COMPLETE">COMPLETE</option>
+          </select>
+        </div>
+        <div class="field field-full">
+          <label for="edit-cartons">件数 (Cartons)</label>
+          <input type="text" id="edit-cartons" />
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="edit-dialog">取消</button>
+        <button type="submit" id="btn-edit-submit" class="btn btn-primary">保存更新</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 4. 系统设置 Modal -->
+  <dialog id="settings-dialog" aria-labelledby="settings-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="settings-title">连接 Google Apps Script 设置</h2>
+      <button type="button" class="icon-close" data-close-dialog="settings-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="settings-form" class="dialog-body">
+      <div class="field">
+        <label for="cfg-gas-url">Google Apps Script Web App URL <span class="req">*</span></label>
+        <input type="url" id="cfg-gas-url" placeholder="https://script.google.com/macros/s/.../exec" required autofocus />
+        <small class="hint">建议直接写进 app.js 的 DEFAULT_GAS_URL，这样所有访客都能看到数据；这里填的只对当前浏览器生效</small>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" id="btn-clear-cfg" class="btn btn-secondary">恢复演示模式</button>
+        <button type="submit" class="btn btn-primary">保存并连接</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 5. Admin 解锁 Modal -->
+  <dialog id="admin-dialog" aria-labelledby="admin-title" closedby="any">
+    <div class="dialog-header">
+      <h2 id="admin-title">Admin 管理解锁</h2>
+      <button type="button" class="icon-close" data-close-dialog="admin-dialog" aria-label="关闭">✕</button>
+    </div>
+
+    <form id="admin-form" class="dialog-body">
+      <div class="field">
+        <label for="admin-password-input">请输入 Admin 密码以启用新建订单、上传单据及修改状态</label>
+        <input type="password" id="admin-password-input" placeholder="输入密码" required autofocus />
+        <small id="admin-error" class="error-text" hidden>密码错误，请重试</small>
+      </div>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="admin-dialog">取消</button>
+        <button type="submit" class="btn btn-primary">解锁</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
