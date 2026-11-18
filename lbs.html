@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LBS 物流商订单看板 (View Only)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-partner="LBS">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">🚚</span>
+        <div>
+          <h1>LBS 采购订单与入库看板</h1>
+          <p class="subtitle">物流合作方专属只读视图 (View Only) · 实时同步 LBS 订单与入库单</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill status-live">🔒 只读视图 (View Only)</span>
+        <button type="button" id="btn-refresh" class="btn btn-secondary">↻ 刷新最新数据</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 统计概览 -->
+    <section class="kpi-grid" aria-label="LBS 订单统计">
+      <article class="kpi-card">
+        <span class="kpi-label">LBS 总订单数</span>
+        <strong id="kpi-total" class="kpi-value">0</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">总件数 (Cartons)</span>
+        <strong id="kpi-cartons" class="kpi-value">0</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">已付款 (DONE)</span>
+        <strong id="kpi-done" class="kpi-value">0</strong>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">待付款 (PENDING)</span>
+        <strong id="kpi-pending" class="kpi-value kpi-warn">0</strong>
+      </article>
+    </section>
+
+    <!-- 筛选栏 -->
+    <section class="toolbar" aria-label="筛选与搜索">
+      <div class="search-box">
+        <input type="search" id="search-input" placeholder="搜索 PO NOMBOR、VENDOR、货品摘要、China Bank..." aria-label="搜索 LBS 订单" />
+      </div>
+      <div class="filter-group">
+        <select id="filter-shipping" aria-label="按地区筛选">
+          <option value="">全部 LBS 地区/渠道</option>
+        </select>
+        <select id="filter-payment" aria-label="按付款状态筛选">
+          <option value="">全部付款状态 (STATUS PAYMENT)</option>
+          <option value="PENDING">PENDING</option>
+          <option value="DONE">DONE</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- 严格对应 \patner\TNL (1).xlsx 的 11 列只读表格 -->
+    <section class="card table-card">
+      <div tabindex="0" role="region" aria-labelledby="orders-caption" class="table-wrapper">
+        <table id="orders-table">
+          <caption id="orders-caption" class="sr-only">LBS 物流商订单只读总表</caption>
+          <thead>
+            <tr>
+              <th>DATE</th>
+              <th>ITEM SUMMERY</th>
+              <th>VENDOR</th>
+              <th>SHIPPING</th>
+              <th>入库单 GOOGLE DRIVE</th>
+              <th>PO NOMBOR</th>
+              <th>quantity carton</th>
+              <th>po GOOGLE DRIVE</th>
+              <th>PO AMOUNT人民币</th>
+              <th>STATUS PAYMENT</th>
+              <th>CHINA BANK</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr>
+              <td colspan="11" class="empty-cell">正在加载 LBS 订单数据...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="partner.js"></script>
+</body>
+</html>
