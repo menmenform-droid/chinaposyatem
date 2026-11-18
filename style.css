@@ -19,6 +19,17 @@
   --radius: 12px;
   --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
   --shadow-lg: 0 20px 25px -5px rgba(15, 23, 42, 0.16), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  --target-size: 24px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --target-size: 44px;
+  }
+}
+
+html {
+  scroll-padding-top: calc(4.25rem + env(safe-area-inset-top, 0px));
 }
 
 *,
@@ -39,6 +50,31 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
+:where(a, code) {
+  overflow-wrap: anywhere;
+}
+
+:where(button, select, textarea, input:not([type="checkbox"], [type="radio"]), [role="button"], nav a, label:has(input[type="checkbox"], input[type="radio"])) {
+  min-block-size: var(--target-size);
+  min-inline-size: var(--target-size);
+}
+
+:where(.toolbar > :not(button, input, select, textarea, a, [role="button"], label)) {
+  min-inline-size: 0;
 }
 
 .sr-only {
@@ -55,12 +91,15 @@ body {
 
 /* Topbar */
 .topbar {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 20;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
@@ -732,15 +771,56 @@ tbody tr.row-pending:hover td {
   gap: 0.35rem;
 }
 
-/* Container query for narrow screens */
-@container (width < 760px) {
+/* ==================== 手机屏幕版 (Container Query < 820px & 手动切换 force-mobile) ==================== */
+body.force-mobile {
+  background: #e2e8f0;
+}
+
+body.force-mobile .topbar-inner,
+body.force-mobile .container {
+  max-width: 460px;
+  background: var(--bg);
+}
+
+body.force-mobile .container {
+  min-height: calc(100vh - 60px);
+  padding: 0.75rem 0.65rem 2rem;
+  box-shadow: 0 0 25px rgba(15, 23, 42, 0.12);
+}
+
+body.force-mobile .kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+body.force-mobile .kpi-card {
+  padding: 0.7rem 0.85rem;
+}
+
+body.force-mobile .kpi-value {
+  font-size: 1.2rem;
+}
+
+body.force-mobile .filter-group {
+  width: 100%;
+}
+
+body.force-mobile .filter-group select {
+  flex: 1 1 calc(50% - 0.25rem);
+  min-width: 0;
+}
+
+body.force-mobile .table-wrapper {
+  max-block-size: none;
+  overflow: visible;
+}
+
+@container (width < 820px) {
   table,
   thead,
-  tbody,
-  tr,
-  th,
-  td {
+  tbody {
     display: block;
+    padding: 0;
   }
 
   thead {
@@ -748,20 +828,74 @@ tbody tr.row-pending:hover td {
   }
 
   tbody tr {
-    margin: 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    margin: 0.65rem 0.5rem;
+    border-radius: 12px;
     overflow: hidden;
     box-shadow: var(--shadow);
   }
 
+  /* 手机卡片：完整 Complete 淡绿色框 */
+  tbody tr.row-complete {
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+    border-left: 5px solid #22c55e;
+  }
+
+  /* 手机卡片：未完成 Pending 粉红色框 */
+  tbody tr.row-pending {
+    background: #fff1f2;
+    border: 1.5px solid #fda4af;
+    border-left: 5px solid #f43f5e;
+  }
+
+  /* 覆盖桌面端的单元格边框，卡片内部改为清爽虚线分隔 */
+  tbody tr.row-complete th,
+  tbody tr.row-complete td,
+  tbody tr.row-pending th,
+  tbody tr.row-pending td,
+  tbody tr.row-complete td:last-child,
+  tbody tr.row-pending td:last-child {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+
+  tbody tr.row-complete td {
+    border-top: 1px dashed rgba(34, 197, 94, 0.26);
+  }
+
+  tbody tr.row-pending td {
+    border-top: 1px dashed rgba(244, 63, 94, 0.24);
+  }
+
+  /* PO 单号始终置顶作为卡片标题栏（兼容 index.html / tnl.html / lbs.html） */
   tbody th {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 2;
-    background: var(--surface-alt);
-    border-bottom: 1px solid var(--border);
+    order: -1;
+    position: static;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.88rem;
+  }
+
+  tbody tr.row-complete th {
+    background: rgba(220, 252, 231, 0.75);
+  }
+
+  tbody tr.row-pending th {
+    background: rgba(255, 228, 230, 0.75);
+  }
+
+  tbody th::before {
+    content: attr(data-label);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
   }
 
   tbody td {
@@ -769,17 +903,36 @@ tbody tr.row-pending:hover td {
     justify-content: space-between;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.55rem 0.85rem;
+    padding: 0.52rem 0.85rem;
     text-align: right;
   }
 
-  .col-summary {
+  /* 手机版解除桌面端的列窄宽限制 */
+  .col-po,
+  .col-vendor,
+  .col-summary,
+  .col-bank,
+  .col-links,
+  .bank-text {
     max-width: none;
+    width: auto;
+  }
+
+  .bank-cell-wrap {
+    align-items: flex-end;
+    max-width: 72%;
+  }
+
+  .bank-text {
+    white-space: normal;
+    word-break: break-all;
+    text-align: left;
   }
 
   tbody td::before {
     content: attr(data-label);
     font-weight: 600;
+    font-size: 0.76rem;
     color: var(--text-muted);
     flex-shrink: 0;
     text-align: left;
@@ -789,7 +942,115 @@ tbody tr.row-pending:hover td {
   .row-actions {
     justify-content: flex-end;
     flex-direction: row;
+    flex-wrap: wrap;
     max-width: none;
+  }
+}
+
+/* 手机真机视口响应式适配 (所有 HTML 页面通用) */
+@media (max-width: 760px) {
+  .topbar-inner {
+    padding: 0.6rem 0.75rem;
+    gap: 0.55rem;
+  }
+
+  .brand-icon {
+    width: 2rem;
+    height: 2rem;
+    font-size: 1.05rem;
+  }
+
+  .brand h1 {
+    font-size: 1rem;
+  }
+
+  .subtitle {
+    font-size: 0.72rem;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .topbar-actions .btn {
+    flex: 1 1 auto;
+    padding: 0.42rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .container {
+    padding: 0.7rem 0.6rem calc(1.75rem + env(safe-area-inset-bottom, 0px));
+    gap: 0.7rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .kpi-card {
+    padding: 0.7rem 0.85rem;
+  }
+
+  .kpi-value {
+    font-size: 1.2rem;
+  }
+
+  .toolbar {
+    padding: 0.65rem;
+    gap: 0.55rem;
+  }
+
+  .search-box {
+    flex: 1 1 100%;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-group select {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+    font-size: 0.8rem;
+  }
+
+  .table-wrapper {
+    max-block-size: none;
+    overflow: visible;
+  }
+
+  /* 手机端弹窗自动变为底部抽屉 (Bottom Sheet)，输入字号 16px 防止 iOS 自动放大 */
+  dialog {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92dvh;
+    margin: auto 0 0 0;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+  }
+
+  .dialog-header {
+    padding: 0.85rem 1rem;
+  }
+
+  .dialog-body {
+    padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .field input,
+  .field select,
+  .field textarea,
+  .search-box input {
+    font-size: 16px;
+  }
+
+  .dialog-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
   }
 }
 

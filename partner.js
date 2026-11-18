@@ -150,6 +150,7 @@ function initCopyCommands() {
 /* ==================== 初始化 ==================== */
 document.addEventListener('DOMContentLoaded', () => {
   initCopyCommands();
+  initViewModeToggle();
   document.getElementById('btn-refresh').addEventListener('click', loadPartnerOrders);
   ['search-input', 'filter-shipping', 'filter-payment'].forEach((id) => {
     const el = document.getElementById(id);
@@ -160,6 +161,27 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadPartnerOrders();
 });
+
+function initViewModeToggle() {
+  const btn = document.getElementById('btn-view-mode');
+  if (!btn) return;
+  const saved = localStorage.getItem('china_po_view_mode');
+  if (saved === 'mobile') {
+    document.body.classList.add('force-mobile');
+  }
+  const syncLabel = () => {
+    const isMobileForced = document.body.classList.contains('force-mobile');
+    btn.textContent = isMobileForced ? '💻 电脑版' : '📱 手机版';
+  };
+  syncLabel();
+  btn.addEventListener('click', () => {
+    const next = !document.body.classList.contains('force-mobile');
+    document.body.classList.toggle('force-mobile', next);
+    localStorage.setItem('china_po_view_mode', next ? 'mobile' : 'auto');
+    syncLabel();
+    showToast(next ? '已切换为手机屏幕卡片版' : '已切换为电脑宽屏自适应版');
+  });
+}
 
 function getGasUrl() {
   try {
@@ -353,6 +375,7 @@ function renderPartnerTable() {
     const poTh = document.createElement('th');
     poTh.scope = 'row';
     poTh.className = 'col-po';
+    poTh.setAttribute('data-label', 'PO NOMBOR');
     poTh.textContent = order.poNo || '-';
     tr.appendChild(poTh);
 

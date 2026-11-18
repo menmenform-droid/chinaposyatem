@@ -244,6 +244,7 @@ function initDialogFallbacks() {
 
 /* ==================== 事件绑定 ==================== */
 function bindEvents() {
+  initViewModeToggle();
   document.getElementById('btn-admin-lock').addEventListener('click', toggleAdminLock);
   document.getElementById('admin-form').addEventListener('submit', handleAdminUnlock);
   document.getElementById('btn-refresh').addEventListener('click', loadOrders);
@@ -296,6 +297,27 @@ function bindEvents() {
     document.getElementById('settings-dialog').close();
     loadOrders();
     showToast(DEFAULT_GAS_URL ? '已恢复默认连接' : '已切换回本地演示模式');
+  });
+}
+
+function initViewModeToggle() {
+  const btn = document.getElementById('btn-view-mode');
+  if (!btn) return;
+  const saved = localStorage.getItem('china_po_view_mode');
+  if (saved === 'mobile') {
+    document.body.classList.add('force-mobile');
+  }
+  const syncLabel = () => {
+    const isMobileForced = document.body.classList.contains('force-mobile');
+    btn.textContent = isMobileForced ? '💻 电脑版' : '📱 手机版';
+  };
+  syncLabel();
+  btn.addEventListener('click', () => {
+    const next = !document.body.classList.contains('force-mobile');
+    document.body.classList.toggle('force-mobile', next);
+    localStorage.setItem('china_po_view_mode', next ? 'mobile' : 'auto');
+    syncLabel();
+    showToast(next ? '已切换为手机屏幕卡片版' : '已切换为电脑宽屏自适应版');
   });
 }
 
@@ -524,6 +546,7 @@ function renderTable() {
     const th = document.createElement('th');
     th.scope = 'row';
     th.className = 'col-po';
+    th.setAttribute('data-label', 'PO 单号');
     th.textContent = order.poNo || '(无单号)';
     tr.appendChild(th);
 

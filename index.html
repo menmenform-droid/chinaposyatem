@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>CHINA PO 订单与单据管理系统</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -18,6 +18,7 @@
       </div>
       <div class="topbar-actions">
         <span id="connection-badge" class="status-pill status-demo">演示模式</span>
+        <button type="button" id="btn-view-mode" class="btn btn-secondary" aria-label="切换手机或电脑视图">📱 手机版</button>
         <a href="tnl.html" target="_blank" rel="noopener noreferrer" class="btn btn-secondary admin-only" hidden>🚢 TNL只读页</a>
         <a href="lbs.html" target="_blank" rel="noopener noreferrer" class="btn btn-secondary admin-only" hidden>🚚 LBS只读页</a>
         <button type="button" id="btn-admin-lock" class="btn btn-secondary">🔒 解锁 Admin</button>
