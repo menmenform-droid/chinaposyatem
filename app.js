@@ -143,7 +143,7 @@ function reportCopyResult(button, ok) {
 }
 
 async function copyElementText(button, target) {
-  const text = target.matches('input, textarea') ? target.value.trim() : target.innerText.trim();
+  const text = target.matches('input, textarea') ? target.value.trim() : target.textContent.trim();
   if (!text) {
     showToast('当前没有可复制的银行账号内容');
     return;
@@ -576,6 +576,10 @@ function renderTable() {
       bankTextDiv.id = bankId;
       bankTextDiv.className = 'bank-text';
       bankTextDiv.textContent = bankVal;
+      bankTextDiv.title = `${bankVal}\n(点击可展开/收起全文，点复制可复制完整内容)`;
+      bankTextDiv.addEventListener('click', () => {
+        bankTextDiv.classList.toggle('is-expanded');
+      });
       bankWrap.appendChild(bankTextDiv);
 
       const actBar = document.createElement('div');
